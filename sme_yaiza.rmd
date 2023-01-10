@@ -1,0 +1,451 @@
+---
+title: "Yaiza_SME"
+output:
+  pdf_document: default
+  html_document: default
+date: "2023-01-08"
+---
+
+## Software matemático y estadístico
+
+Lo primero que tenemos que hacer es importar las librerias que vamos a usar
+
+```{r setup, include=FALSE}
+library(graphics)
+```
+
+Como vamos a generar dataframes y datasets aleatorios, vamos a definir una seed para que nos de todo el rato los mismos datos.
+
+```{r}
+set.seed(123)
+
+```
+
+A continuación, vamos a definir las funciones para generar la información que vamos a necesitar pasar a las funciones. Para generar un dataset tenemos que indicar en número de filas y de columnas que queremos.
+
+```{r}
+create_dataset <- function(num_rows, num_columns) {
+  #Creamos un data frame vacío que almacenará los datos del dataset
+  data <- data.frame()
+  
+  #Generamos los datos del dataset
+  for (i in 1:num_rows) {
+    row <- data.frame(matrix(nrow = 1, ncol = num_columns))
+    colnames(row) <- paste0("V", 1:num_columns)
+    for (j in 1:num_columns) {
+      # Generamos un número aleatorio para cada columna
+      value <- sample(0:100, 1)
+      row[, j] <- value
+    } 
+    # Añadimos la fila al dataset
+    data <- rbind(data, row)
+  }
+  
+  #Devolvemos el dataset
+  return(data)
+}
+```
+
+Vamos a generar el dataset y el array que vamos a usar.
+
+```{r}
+dataset <- create_dataset(10, 8)
+dataset
+array <- sample(1:100, 20, replace=TRUE)
+array
+```
+
+En esta función, recibimos como entrada un vector de tipo numérico y un número de intervalos para implementar la discretización del ropio vector que se da como entrada mediante el método equal width.
+
+```{r}
+discretizeEW <- function (x, num.bins) {
+  #comprobamos los tipos
+  resul <- class(x)=="numeric" | class(x) == "integer"
+  resul2 <- class(num.bins) == "integer" | class(num.bins)=="numeric" 
+  if (resul & resul2) {
+    inter <- as.integer((max(x) - min(x))/num.bins)
+    cut.points <- c()
+    x.discretized <- c()
+    aux <- c()
+    for (i in 1:(num.bins + 1)) {
+      cut.points[i] <- min(x) + inter * (i-1)
+    }
+    
+    k <- 1
+    for (i in 1:(num.bins)){
+      data <- c()
+      for (j in x) {
+          if (j >= cut.points[i] & j <= cut.points[i+1]) {
+            data[k] <- j
+            k <- k + 1
+        }
+      }
+      x.discretized <- append(x.discretized, data)
+      k <- 1
+    }
+    # print(x.discretized)
+    # print(cut.points)
+  } 
+  return(c(x.discretized, cut.points))
+}
+discretizeEW(array, 3)
+```
+
+En esta función, al igual que en la anterior, recibimos un vector de tipo numérico y un número de intervalos. La diferencia esta que, en este caso, discretizamos el vector con el método equal frequency.
+
+```{r}
+discretizeEF <- function (x, num.bins) {
+  resul <- class(x)=="numeric" | class(x) == "integer"
+  resul2 <- class(num.bins) == "integer" | class(num.bins)=="numeric" 
+  if (resul & resul2) {
+    n = as.integer(length(x) / num.bins)
+    x.discretized <- c()
+    cut.points = c()
+    k <- 1
+    for (i in 1:num.bins) {
+        data <- c()
+        for (j in ((i-1) * n):(i * n)) {
+          if (j < length(x)) {
+            data[k] <- x[j]
+            k <- k + 1  
+          }
+        }
+        x.discretized <- append(x.discretized, data)
+        k <- 1
+        #print(x.discretized)
+        cut.points <-  append(cut.points, x[j])
+    }
+    #print(cut.points)
+    x.discretized <- x.discretized[2: length(x.discretized)] #Añade un NA al principio y lo eliminamos
+    return(c(x.discretized, cut.points))
+  }
+}
+
+discretizeEF(array, 3)
+```
+
+A continuación, vamos a calcular la entropía de un vector numérico. Para ello, vamos a hacer uso de la función contar que, dado el vector numérico, el elemento actual y la lista auxiliar, mira si el elemento está en la lista auxiliar. En caso de que no esté, suma uno al contador. Finalmente, añade el elemento a la lista auxiliar.
+
+Gracias a la función contar, podemos saber cuantos elementos diferentes entre si contiene el array.
+
+```{r}
+contar <- function(x, elem, aux) {
+  cont <- 0
+  for (j in 1:length(x)) {
+    act <- x[j]
+    if (!elem %in% aux && act == elem) {
+      cont <- cont + 1
+    }
+  }
+  aux <- c(aux, elem)
+  return(list(cont, aux))
+}
+
+entropy <- function(x) {
+  tam <- length(x)
+  pi <- rep(0, length(unique(x)))
+  aux <- list()
+  i <- 0
+  for (j in x) {
+    if (!j %in% aux) {
+      cont_aux <- contar(x, j, aux)
+      pi[i + 1] <- cont_aux[[1]]
+      aux <- cont_aux[[2]]
+      i <- i + 1
+    }
+  }
+  
+  sum <- 0
+  for (i in 1:length(pi)) {
+    sum <- sum - (pi[i] / tam) * log2(pi[i] / tam)
+  }
+  return(sum)
+}
+
+entropy(array)
+```
+
+Con la función column_variances, calculamos la varianza que tiene cada columna de un dataframe teniendo en cuenta que el dataframe puede tener varias columnas o una única.
+
+```{r}
+column_variances <- function(matriz) {
+  if (inherits(matrix, "data.frame")) {
+    matrz <- as.matrix(matriz)
+  }
+  
+  if (length(dim(matriz)) == 2) {
+    # Calculamos la media aritmética de cada columna
+    means <- colMeans(matriz)
+    # Calculamos la varianza de cada columna
+    vari <-
+      sapply(seq_len(ncol(matriz)), function(i) {
+        sum((matriz[, i] - means[i]) ^ 2) / nrow(matriz)
+      })
+  } else {
+    # Si la matriz solo tiene una columna, calculamos la varianza de esa columna
+    mean <- mean(matriz)
+    vari <- sum((matriz - mean) ^ 2) / length(matriz)
+  }
+  
+  return(vari)
+}
+
+column_variances(dataset)
+
+
+```
+
+En este caso, calculamos la entropia de cada columna de un dataframe usando la función entropy que hemos implementado con anterioridad
+
+```{r}
+column_entropy <- function(df) {
+  entropies <- c()
+  for (i in 1:length(df)) {
+    entropies <- c(entropies, entropy(df[, i]))
+  }
+  return (entropies)
+}
+dataset <- create_dataset(3, 11)
+column_entropy(dataset)
+```
+
+Ahora bien, una vez implementadas las funciones column_variances() y colum_entropy(), implementamos la función filter_variables() donde le pasamos el datafreme y los límites por los que queremos filtrar los datos para crear el nuevo dataframe.
+
+```{r}
+filter_variables <- function(df, entropy_threshold, variance_threshold) {
+  # Calculamos la varianza y la entropía de cada columna
+  variances <- column_variances(df)
+  entropies <- column_entropy(df)
+
+  # Filtramos las columnas que cumplen con los requisitos
+  filtered_columns <- character(0)
+  for (i in seq_along(df)) {
+    col <- names(df)[i]
+    if (entropies[i] >= entropy_threshold && variances[i] >= variance_threshold) {
+      filtered_columns <- c(filtered_columns, col)
+    }
+  }
+
+  # Creamos el nuevo dataset con las columnas filtradas
+  filtered_df <- df[filtered_columns]
+
+  return (filtered_df)
+}
+filter_variables(dataset, 1, 1)
+```
+
+Ahora bien. Vamos a calcular el area bajo la curva ROC. Para ello, vamos a usar la función auxiliar auc_aux() en la que, una vez calculados los ratios de falsos positivos y verdaderos positibos, va calculando y sumando el area bajo la curva. Finalmente, nos sacará el gráfico de la curva dibujado por los valores tprs y fprs.
+
+```{r}
+auc_aux <- function(fpr, tpr) {
+  area <- 0
+  for (i in 1:(length(fpr) - 1)) {
+    base_mayor <- fpr[i + 1] - fpr[i]
+    base_menor <- tpr[i + 1] - tpr[i]
+    altura <- tpr[i + 1]
+    area <- area + (base_mayor + base_menor) * altura / 2
+  }
+  return(area)
+}
+
+AUC <- function(df) {
+  df <- df[order(df$value), ]
+  
+  min_value <- min(df$value)
+  max_value <- max(df$value)
+  
+  cutoffs <- seq(min_value, max_value, length.out = 50)
+  
+  predictions <- list()
+  labels <- list()
+  tprs <- c()
+  fprs <- c()
+  
+  tp_total <- 0
+  tn_total <- 0
+  fp_total <- 0
+  fn_total <- 0
+  
+  for (cutoff in cutoffs) {
+    prediction <- ifelse(df$value > cutoff, 1, 0)
+    predictions <- c(predictions, prediction)
+    labels <- c(labels, df$label)
+    
+    for (i in 1:nrow(df)) {
+      row <- df[i, ]
+      prediction <- ifelse(row$value > cutoff, 1, 0)
+      label <- row$label
+      tp_total <- tp_total + (prediction == 1 & label == 1)
+      tn_total <- tn_total + (prediction == 0 & label == 0)
+      fp_total <- fp_total + (prediction == 1 & label == 0)
+      fn_total <- fn_total + (prediction == 0 & label == 1)
+      if (tp_total + fn_total == 0 || is.na(tp_total + fn_total)) {
+        tpr <- 0
+      } else {
+        tpr <- tp_total / (tp_total + fn_total)
+      }
+      
+      if (fp_total + tn_total == 0 || is.na(fp_total + tn_total)) {
+        fpr <- 0
+      } else {
+        fpr <- fp_total / (fp_total + tn_total)
+      }
+      tprs <- c(tprs, tpr)
+      fprs <- c(fprs, fpr)
+    }
+    
+    tprs <- tprs[order(fprs)]
+    fprs <- sort(fprs)
+    tp_total <- 0
+    tn_total <- 0
+    fp_total <- 0
+    fn_total <- 0
+  }
+  
+  plot(fprs, tprs, xlab = 'False Positive Rate', ylab = 'True Positive Rate')
+  roc_auc <- auc_aux(tprs, fprs)
+  print(roc_auc)
+}
+rows <- data.frame(value = sample(0:100, 150, replace = TRUE),
+                   label = sample(c(TRUE, FALSE), 150, replace = TRUE))
+
+df <- rows
+
+AUC(df)
+```
+
+Ahora bien, vamos a normalizar los datos del dataset. Para ello, tenemos que tener en cuenta que los datos pueden ser de tipo numeric o categorical. En cualquier caso, para poder normalizarlos o estandarizarlos, los datos tienen que ser numéricos. Dependiendo de la opción que se quiera, es decir, normalizar o estandarizar, se realizara de forma diferente.
+
+```{r}
+normalize_dataset <- function(dataset, option) {
+  min_value <- min(dataset[1])
+  max_value <- max(dataset[1])
+  mean_value <- sum(dataset[1]) / length(dataset[1])
+  std_value <- sqrt(sum(sapply(dataset[1], function(x) {(x - mean_value) ^ 2})) / length(dataset[1]))  
+  for (i in 1:nrow(dataset)) {
+    for (j in 1:ncol(dataset)) {
+      if (is.numeric(dataset[i, j])) {
+        if (option == "normalize") {
+          dataset[i, j] <- round((dataset[i, j] - min_value) / (max_value - min_value), 4)
+        } else if (option == "standardize") {
+          dataset[i, j] <- round((dataset[i, j] - mean_value) / std_value, 4)
+        }
+      }
+    }
+  }
+  return(dataset)
+}
+```
+
+Vamos a ver que nos devuelve la función normalize_dataset dependiendo de la opción que se especifique.
+
+```{r}
+normalize_dataset(dataset, "normalize")
+normalize_dataset(dataset, "standardize")
+
+```
+
+Para ir terminando, vamos a calcular la correlación o la información mutua del tipo de la columna con la columna adyacente. Es decir, por pares. Para ello, necesitamos saber en primera instancia que tipo de datos manejamos. Una vez que sabemos esto, podemos proceder a calcular la correlación o la información mutua. Para saber si calculamos una o la otra, nos fijamos en los tipos de datos que tenemos en la columna. Si es categorical, calculamos la información mutua. En caso contrario, la correlación.
+
+```{r}
+get_column_type <- function(dataset, column) {
+  # Tomamos una muestra de los valores de la columna
+  sample <- dataset[, column]
+
+  # Comprobamos si todos los elementos de la muestra son enteros
+  if (all(is.integer(sample)) || all(is.numeric(sample)) ) {
+    # Si todos son enteros, comprobamos si todos los enteros son valores posibles de la columna
+    unique_values <- unique(sample)
+    if (all(0 <= unique_values & unique_values < length(unique_values))) {
+      # Si todos los enteros son valores posibles de la columna, entonces es una columna categórica
+      return("categorical")
+    }
+  }
+
+  # Si no es una columna categórica, entonces es numérica
+  return("numerical")
+}
+
+calculate_correlation <- function(dataset) {
+  #Determinamos el tipo de cada columna
+  column_types <-
+    lapply(seq_along(dataset), function(i)
+      get_column_type(dataset, i))
+  
+  #Calculamos la correlación o la información mutua entre todos los pares de columnas
+  correlations <- list()
+  for (i in seq_along(dataset)) {
+    for (j in (i + 1):length(dataset)) {
+      if (j > length(column_types)) {
+        next
+      }
+      column_i <- dataset[, i]
+      column_j <- dataset[, j]
+      if (column_types[[i]] == "numerical" &&
+          column_types[[j]] == "numerical") {
+        # Calculamos la correlación entre dos columnas numéricas
+        mean_i <- mean(column_i)
+        stdev_i <- sd(column_i)
+        mean_j <- mean(column_j)
+        stdev_j <- sd(column_j)
+        correlation <-
+          sum(mapply(function(x, y)
+            (x - mean_i) * (y - mean_j), column_i, column_j)) / (stdev_i * stdev_j)
+        correlations <- c(correlations, list(c(i, j, correlation)))
+      } else if (column_types[[i]] == "categorical" &&
+                 column_types[[j]] == "categorical") {
+        # Calculamos la información mutua entre dos columnas categóricas
+        values_i <- unique(column_i)
+        values_j <- unique(column_j)
+        mutual_information <- 0
+        for (value_i in values_i) {
+          for (value_j in values_j) {
+            p_i <- sum(column_i == value_i) / length(column_i)
+            p_j <- sum(column_j == value_j) / length(column_j)
+            p_ij <-
+              sum((column_i == value_i) &
+                    (column_j == value_j)) / length(column_i)
+            mutual_information <-
+              mutual_information + p_ij * log(p_ij / (p_i * p_j), base = 2)
+          }
+        }
+        correlations <- c(correlations, list(c(i, j, mutual_information)))
+      }
+    }
+  }
+  return(correlations)
+}
+cor <- calculate_correlation(dataset)
+  
+cor
+```
+
+Finalmente, obtenemos gráficamente lo calculado en la función anterior.
+
+```{R}
+plot_corr_mutual_info <- function(data) {
+  correlations <- calculate_correlation(data)
+  
+  # Creamos una lista vacía para almacenar los gráficos
+  imgs <- list() 
+  
+  # Recorremos cada tupla de correlación
+  for (correlation in correlations) {
+    i <- data[, correlation[1]]
+    j <- data[, correlation[2]]
+    
+    # Comprobamos que las columnas son numéricas
+    if(is.numeric(i) && is.numeric(j)){
+      # Crea el gráfico y lo añade a la lista
+      img <- plot(i, j, main = paste("Correlación entre",names(data)[correlation[1]], "y", names(data)[correlation[2]]))
+      imgs <- c(imgs, list(img))
+    } 
+  }
+  
+  # Iteramos por cada gráfico para mostrarlos
+  lapply(imgs, print)
+}
+
+plot_corr_mutual_info(dataset)
+
+```
